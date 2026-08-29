@@ -1,0 +1,10 @@
+# Intellij IDEA
+.idea
+
+# Secrets
+.env.local
+.env
+
+# Vite
+/dist/
+/node_modules/

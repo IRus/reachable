@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#0d1117"/>
+  <!-- Зона доступности: неровное пятно, а не круг, потому что считается по улицам. -->
+  <path d="M256 92c58 0 96 26 128 58s36 74 20 116-24 62-58 88-86 44-124 32-78-38-96-76-24-88-4-128 76-90 134-90z"
+        fill="#3ddc97" fill-opacity="0.18" stroke="#3ddc97" stroke-width="14" stroke-linejoin="round"/>
+  <circle cx="256" cy="268" r="34" fill="#5aa9ff" stroke="#ffffff" stroke-width="14"/>
+</svg>

@@ -1,0 +1,157 @@
+:root {
+  --ink: #f2f5f7;
+  --ink-dim: #9fb0bd;
+  --panel: rgba(16, 22, 28, 0.92);
+  --line: rgba(255, 255, 255, 0.12);
+  --accent: #3ddc97;
+  --warn: #f6c453;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0d1117;
+  color: var(--ink);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Панель управления не должна уезжать под системные жесты и «чёлку». */
+  overscroll-behavior: none;
+}
+
+.app {
+  position: relative;
+  height: 100%;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500; /* выше слоёв Leaflet, они держатся в пределах 400 */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
+}
+
+.status {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+.status--warn {
+  color: var(--warn);
+}
+
+.status--busy::after {
+  content: "";
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "modes minutes"
+    "slider slider";
+  align-items: center;
+  gap: 12px;
+}
+
+.controls__modes {
+  grid-area: modes;
+  display: flex;
+  gap: 8px;
+}
+
+.chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  border-radius: 999px;
+  /* 44 px — минимальная цель для пальца, ниже промахиваться начинают все. */
+  min-height: 44px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: #0d1117;
+  background: var(--accent);
+  font-weight: 600;
+}
+
+.controls__minutes {
+  grid-area: minutes;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.controls__caption {
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.controls__number {
+  width: 84px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.controls__slider {
+  grid-area: slider;
+  width: 100%;
+  accent-color: var(--accent);
+  height: 44px;
+}
+
+/* Подпись OpenStreetMap обязательна по лицензии. Держим её читаемой на тёмном. */
+.leaflet-control-attribution {
+  background: rgba(13, 17, 23, 0.7) !important;
+  color: var(--ink-dim) !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--ink-dim) !important;
+}

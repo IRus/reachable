@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="description" content="Карта показывает, куда можно дойти или доехать за выбранное число минут.">
+  <title>Reachable — куда я успею</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/main.tsx"></script>
+<script>
+  // Регистрируем воркер вручную, чтобы один раз перезагрузить страницу, когда
+  // новая версия взяла управление. Иначе установленное приложение может
+  // неделями показывать старую сборку.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+      navigator.serviceWorker.register('./sw.js').catch(() => {
+        // Регистрация падает в приватном окне и на http. Приложение работает
+        // и без офлайна, поэтому молча продолжаем.
+      });
+    });
+  }
+</script>
+</body>
+</html>

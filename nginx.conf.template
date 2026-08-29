@@ -1,0 +1,78 @@
+# Образ nginx:stable-alpine прогоняет файлы из /etc/nginx/templates через
+# envsubst при старте и кладёт результат в /etc/nginx/conf.d. Отсюда ${ORS_API_KEY}
+# ниже. NGINX_ENVSUBST_FILTER=^ORS_ в compose ограничивает подстановку одной
+# переменной, чтобы посторонняя переменная окружения ничего здесь не подменила.
+
+# Через этот резолвер разрешается ровно одно имя — api.openrouteservice.org,
+# внутренних имён здесь нет. Поэтому берём публичные серверы, а не встроенный
+# DNS Docker (127.0.0.11): тот существует только в пользовательских сетях, и с
+# ним образ нельзя запустить обычным docker run.
+resolver 1.1.1.1 8.8.8.8 valid=300s ipv6=off;
+
+# Бесплатная квота ORS — порядка 500 запросов в сутки на ключ, и ключ здесь
+# общий для всех гостей. Ограничение по IP не даёт одному клиенту съесть её
+# целиком.
+limit_req_zone $binary_remote_addr zone=ors:10m rate=20r/m;
+
+server {
+  listen 80;
+  listen [::]:80;
+  server_name _;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # Прокси к OpenRouteService. Ключ добавляется здесь и в браузер не попадает.
+  location /ors/ {
+    limit_req zone=ors burst=10 nodelay;
+
+    # Адрес в переменной, а не строкой. Со строкой nginx резолвит имя один раз
+    # при старте и держит адрес до перезапуска, а с переменной перечитывает его
+    # по TTL резолвера. Тот же приём уже используется в ingress ibragimov.by.
+    # Побочный эффект: nginx перестаёт сам срезать префикс, его срезает rewrite.
+    set $ors_upstream https://api.openrouteservice.org;
+    rewrite ^/ors/(.*)$ /$1 break;
+    proxy_pass $ors_upstream;
+
+    proxy_ssl_server_name on;
+    proxy_set_header Host api.openrouteservice.org;
+    proxy_set_header Authorization "${ORS_API_KEY}";
+    proxy_set_header Accept application/geo+json;
+
+    # Изохрона считается медленно, дефолтные 60s хватает, но ответ большой.
+    proxy_buffering off;
+  }
+
+  # Сборка Vite: в имени каждого файла есть хеш содержимого.
+  location /assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+
+  # Иконки без хеша в имени. Меняются примерно никогда, а service worker
+  # всё равно сверяет их по ревизии.
+  location /icons/ {
+    add_header Cache-Control "public, max-age=604800";
+  }
+
+  # Эти файлы решают, на какой сборке окажется клиент, поэтому не должны
+  # приходить из устаревшего HTTP-кэша.
+  location = / {
+    add_header Cache-Control "no-cache";
+  }
+
+  location = /index.html {
+    add_header Cache-Control "no-cache";
+  }
+
+  location = /sw.js {
+    add_header Cache-Control "no-cache";
+  }
+
+  location = /manifest.json {
+    add_header Cache-Control "no-cache";
+  }
+
+  location ~ "^/workbox-[0-9a-f]+\.js$" {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+}
