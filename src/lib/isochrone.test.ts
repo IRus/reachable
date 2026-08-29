@@ -1,5 +1,5 @@
 import {afterEach, describe, expect, it, vi} from "vitest";
-import {fetchIsochrone, OrsError} from "./ors";
+import {fetchIsochrone, IsochroneError} from "./isochrone";
 
 const center = {lat: 53.9023, lon: 27.5619};
 
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe("fetchIsochrone", () => {
-  it("posts lon/lat in that order and range in seconds", async () => {
+  it("asks for a filled polygon with the time contour in minutes", async () => {
     const spy = mockFetch(async () =>
       jsonResponse({features: [{geometry: {type: "Polygon", coordinates: [square]}}]})
     );
@@ -35,22 +35,23 @@ describe("fetchIsochrone", () => {
     await fetchIsochrone({center, minutes: 15, mode: "walking"});
 
     const [url, init] = spy.mock.calls[0]!;
-    expect(String(url)).toContain("/ors/v2/isochrones/foot-walking");
+    expect(String(url)).toContain("/iso/isochrone");
     expect(JSON.parse(String(init!.body))).toEqual({
-      locations: [[27.5619, 53.9023]],
-      range: [900],
-      range_type: "time"
+      locations: [{lat: 53.9023, lon: 27.5619}],
+      costing: "pedestrian",
+      contours: [{time: 15}],
+      polygons: true
     });
   });
 
-  it("uses the cycling profile for the cycling mode", async () => {
+  it("uses the bicycle costing for the cycling mode", async () => {
     const spy = mockFetch(async () =>
       jsonResponse({features: [{geometry: {type: "Polygon", coordinates: [square]}}]})
     );
 
     await fetchIsochrone({center, minutes: 10, mode: "cycling"});
 
-    expect(String(spy.mock.calls[0]![0])).toContain("cycling-regular");
+    expect(JSON.parse(String(spy.mock.calls[0]![1]!.body)).costing).toBe("bicycle");
   });
 
   it("returns rings flipped into lat/lon order", async () => {
@@ -89,17 +90,17 @@ describe("fetchIsochrone", () => {
   });
 
   it("reports a rate limit", async () => {
-    mockFetch(async () => jsonResponse({error: "quota"}, 429));
+    mockFetch(async () => jsonResponse({error: "too many"}, 429));
 
     await expect(fetchIsochrone({center, minutes: 15, mode: "walking"}))
       .rejects.toMatchObject({kind: "rate-limited"});
   });
 
-  it("reports a rejected key", async () => {
-    mockFetch(async () => jsonResponse({error: "forbidden"}, 403));
+  it("reports a server failure", async () => {
+    mockFetch(async () => jsonResponse({error: "boom"}, 502));
 
     await expect(fetchIsochrone({center, minutes: 15, mode: "walking"}))
-      .rejects.toMatchObject({kind: "unauthorized"});
+      .rejects.toMatchObject({kind: "server"});
   });
 
   it("reports an empty answer when no roads are near", async () => {
@@ -115,11 +116,11 @@ describe("fetchIsochrone", () => {
     });
 
     const error = await fetchIsochrone({center, minutes: 15, mode: "walking"}).catch(e => e);
-    expect(error).toBeInstanceOf(OrsError);
+    expect(error).toBeInstanceOf(IsochroneError);
     expect(error.kind).toBe("offline");
   });
 
-  it("passes an abort through instead of turning it into an OrsError", async () => {
+  it("passes an abort through instead of wrapping it", async () => {
     mockFetch(async () => {
       throw new DOMException("aborted", "AbortError");
     });

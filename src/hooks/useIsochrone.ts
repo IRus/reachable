@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {circleRing, distanceMeters, type LatLon} from "../lib/geo";
-import {fetchIsochrone, OrsError, type Rings} from "../lib/ors";
+import {fetchIsochrone, IsochroneError, type Rings} from "../lib/isochrone";
 import {reachDistanceMeters, type Mode} from "../lib/travel";
 
 /**
@@ -87,7 +87,7 @@ export function useIsochrone(
           zone: {rings, source: "circle"},
           loading: false,
           notice:
-            error instanceof OrsError
+            error instanceof IsochroneError
               ? error.message
               : "Не удалось построить зону по улицам"
         });

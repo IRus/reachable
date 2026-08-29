@@ -1,4 +1,4 @@
 FROM nginx:stable-alpine
 
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY /dist /usr/share/nginx/html
