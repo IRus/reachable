@@ -7,7 +7,12 @@ import {MODES, type Mode} from "./travel";
  */
 export type Rings = readonly Ring[];
 
-export type IsochroneErrorKind = "offline" | "rate-limited" | "empty" | "server";
+export type IsochroneErrorKind =
+  | "offline"
+  | "rate-limited"
+  | "unauthorized"
+  | "empty"
+  | "server";
 
 export class IsochroneError extends Error {
   constructor(readonly kind: IsochroneErrorKind, message: string) {
@@ -17,13 +22,12 @@ export class IsochroneError extends Error {
 }
 
 /**
- * Запрос идёт на собственный origin, а не в Valhalla напрямую. Так нет заботы
- * о CORS, а nginx заодно ограничивает частоту запросов: считает общественный
- * сервер FOSSGIS, и грузить его нельзя. base у Vite относительный, отсюда
- * document.baseURI.
+ * Запрос идёт на собственный origin, а не в OpenRouteService напрямую: ключ
+ * добавляет nginx (в продакшене) или dev-прокси Vite (локально), поэтому в
+ * браузере его нет. base у Vite относительный, отсюда document.baseURI.
  */
-function endpoint(): string {
-  return new URL("iso/isochrone", document.baseURI).toString();
+function endpoint(profile: string): string {
+  return new URL(`ors/v2/isochrones/${profile}`, document.baseURI).toString();
 }
 
 function ringFromGeoJson(coordinates: readonly (readonly number[])[]): Ring {
@@ -65,16 +69,14 @@ export async function fetchIsochrone(request: IsochroneRequest): Promise<Rings> 
 
   let response: Response;
   try {
-    response = await fetch(endpoint(), {
+    response = await fetch(endpoint(MODES[mode].profile), {
       method: "POST",
       signal,
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        locations: [{lat: center.lat, lon: center.lon}],
-        costing: MODES[mode].costing,
-        contours: [{time: minutes}],
-        // Без этого Valhalla вернёт линии, а не залитый полигон.
-        polygons: true
+        locations: [[center.lon, center.lat]],
+        range: [Math.round(minutes * 60)],
+        range_type: "time"
       })
     });
   } catch (cause) {
@@ -85,6 +87,9 @@ export async function fetchIsochrone(request: IsochroneRequest): Promise<Rings> 
 
   if (response.status === 429) {
     throw new IsochroneError("rate-limited", "Слишком много запросов, попробуй позже");
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new IsochroneError("unauthorized", "Сервис маршрутов не принял ключ");
   }
   if (!response.ok) {
     throw new IsochroneError("server", `Сервис маршрутов ответил ${response.status}`);

@@ -4,8 +4,8 @@
 число минут.
 
 Зона строится по реальным улицам (это называется **изохрона** — граница равного
-времени в пути), а не кругом. Считает её публичный сервер
-[Valhalla от FOSSGIS](https://valhalla1.openstreetmap.de). Ключ не нужен.
+времени в пути), а не кругом. Считает её
+[OpenRouteService](https://openrouteservice.org).
 
 Живёт на <https://reachable.heapyhop.com>.
 
@@ -18,26 +18,46 @@
   и честно подписывает его как приблизительный.
 - Ставится на телефон как приложение и открывается без адресной строки.
 
-## Почему запрос идёт через свой nginx
+## Ключ OpenRouteService
 
-Фронтенд ходит не в Valhalla напрямую, а на свой же origin, на путь `/iso/`.
-Так проще: нет заботы о CORS, и nginx заодно держит ограничение в 20 запросов
-в минуту с адреса. Сервер FOSSGIS бесплатный и без ключа, но грузить его нельзя,
-и ограничение — наша часть договора. nginx также представляется в `User-Agent`,
-как они и просят.
+Ключ **никогда не попадает в браузер**. Фронтенд ходит на свой же origin, на
+путь `/ors/`, а заголовок `Authorization` подставляет прокси:
 
-Локально ту же роль играет dev-прокси Vite.
+- в продакшене — nginx из `nginx.conf.template`, ключ приходит переменной
+  окружения `ORS_API_KEY`;
+- локально — dev-прокси Vite, ключ читается из `.env.local`.
 
-## Почему не OpenRouteService
+Бесплатный ключ берётся тут: <https://openrouteservice.org/dev/#/signup>.
+Квота — порядка 500 запросов в сутки, поэтому в nginx стоит ограничение
+20 запросов в минуту с одного адреса.
 
-Сначала использовался ORS. С сервера, где живёт приложение, провайдер режет TLS
-до `openrouteservice.org`: TCP-порт открывается, а рукопожатие висит до
-таймаута. GitHub, Mapbox и Valhalla с той же машины отвечают за 0.2 секунды.
-Valhalla при этом не требует ключа вообще, поэтому переехали на него.
+## Ловушка на сервере: MTU
+
+Путь от сервера schwifty до `api.openrouteservice.org` не пропускает пакеты
+больше примерно 1420 байт, а Path MTU Discovery на нём сломан. Выглядит это как
+блокировка: TCP-порт открывается, TLS-рукопожатие доходит до сертификата и
+намертво встаёт до таймаута. Другие сайты с той же машины работают, потому что
+их путь короче.
+
+Поэтому в `compose.yaml` на сервере контейнер подключён к отдельной сети
+`ors_egress` с MTU 1400, и она стоит первой, то есть даёт маршрут по умолчанию.
+Сеть `schwifty` остаётся второй — через неё контейнер виден cloudflared.
+
+Порог проверяется так:
+
+```bash
+docker network create --opt com.docker.network.driver.mtu=1400 mtu-test
+docker run --rm --network mtu-test curlimages/curl -s -o /dev/null \
+  -w "%{http_code}\n" --max-time 10 https://api.openrouteservice.org/v2/health
+docker network rm mtu-test
+```
+
+`404` — хорошо, TLS прошёл. Пусто и таймаут — MTU всё ещё велик.
 
 ## Разработка
 
 ```bash
+cp .env.example .env.local   # вписать свой ключ
 pnpm install
 pnpm start                   # https://localhost:5173
 pnpm run test
@@ -65,8 +85,15 @@ iOS Safari переспрашивает разрешение на геолока
 ```bash
 pnpm run build
 docker build -t reachable .
-docker run --rm -p 8080:80 reachable
+docker run --rm -p 8080:80 \
+  -e ORS_API_KEY=<ключ> \
+  -e NGINX_ENVSUBST_FILTER='^ORS_' \
+  reachable
 ```
+
+`NGINX_ENVSUBST_FILTER` нужен, потому что образ nginx прогоняет шаблон конфига
+через `envsubst`. Фильтр ограничивает подстановку переменными на `ORS_`, чтобы
+посторонняя переменная окружения ничего не подменила в конфиге.
 
 Образ собирает GitHub Actions и кладёт в `ghcr.io/irus/reachable:main`.
 

@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe("fetchIsochrone", () => {
-  it("asks for a filled polygon with the time contour in minutes", async () => {
+  it("posts lon/lat in that order and range in seconds", async () => {
     const spy = mockFetch(async () =>
       jsonResponse({features: [{geometry: {type: "Polygon", coordinates: [square]}}]})
     );
@@ -35,23 +35,22 @@ describe("fetchIsochrone", () => {
     await fetchIsochrone({center, minutes: 15, mode: "walking"});
 
     const [url, init] = spy.mock.calls[0]!;
-    expect(String(url)).toContain("/iso/isochrone");
+    expect(String(url)).toContain("/ors/v2/isochrones/foot-walking");
     expect(JSON.parse(String(init!.body))).toEqual({
-      locations: [{lat: 53.9023, lon: 27.5619}],
-      costing: "pedestrian",
-      contours: [{time: 15}],
-      polygons: true
+      locations: [[27.5619, 53.9023]],
+      range: [900],
+      range_type: "time"
     });
   });
 
-  it("uses the bicycle costing for the cycling mode", async () => {
+  it("uses the cycling profile for the cycling mode", async () => {
     const spy = mockFetch(async () =>
       jsonResponse({features: [{geometry: {type: "Polygon", coordinates: [square]}}]})
     );
 
     await fetchIsochrone({center, minutes: 10, mode: "cycling"});
 
-    expect(JSON.parse(String(spy.mock.calls[0]![1]!.body)).costing).toBe("bicycle");
+    expect(String(spy.mock.calls[0]![0])).toContain("cycling-regular");
   });
 
   it("returns rings flipped into lat/lon order", async () => {
@@ -94,6 +93,13 @@ describe("fetchIsochrone", () => {
 
     await expect(fetchIsochrone({center, minutes: 15, mode: "walking"}))
       .rejects.toMatchObject({kind: "rate-limited"});
+  });
+
+  it("reports a rejected key", async () => {
+    mockFetch(async () => jsonResponse({error: "forbidden"}, 403));
+
+    await expect(fetchIsochrone({center, minutes: 15, mode: "walking"}))
+      .rejects.toMatchObject({kind: "unauthorized"});
   });
 
   it("reports a server failure", async () => {
